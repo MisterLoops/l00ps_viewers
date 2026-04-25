@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>L00PS Reality Viewer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    body { 
+      margin: 0; padding:0; background: #0a0a0a; color: #ffffff; 
+      font-family: 'Inter', system-ui, sans-serif; 
+      display: flex; flex-direction: column; align-items: center; 
+      justify-content: center; height: 100vh; overflow: hidden;
+    }
+
+    .viewer { 
+      position: relative; width: 100%; max-height:100vh; height: auto; 
+      border-radius: 12px; overflow: hidden; border: 1px solid #1f1f1f; 
+      display: flex; justify-content: center; align-items: center;
+      cursor: crosshair;
+    }
+
+    /* Magnifying Lens */
+    .lens {
+      position: absolute;
+      width: 300px; 
+      height: 300px;
+      border: 4px solid #ffffff;
+      border-radius: 50%;
+      background-repeat: no-repeat;
+      pointer-events: none; 
+      display: none; 
+      z-index: 100;
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      background-size: 800%; 
+      /* Clean centering */
+      transform: translate(-50%, -25%); 
+    }
+
+    /* Lens Toggle Button */
+    .lens-btn {
+      position: absolute; bottom: 20px; z-index: 101;
+      width: 50px; height: 50px; background: rgba(0,0,0,0.6);
+      border: 1px solid #333; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s ease;
+      font-size: 20px;
+    }
+    .lens-btn:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
+    .lens-btn.active { border-color: #fff; background: rgba(255,255,255,0.15); }
+
+    .spinner {
+      position: absolute; width: 40px; height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top: 4px solid #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      z-index: 2; display: none;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    .nft-img { 
+      width: 100%; height: auto; max-width: 1000px;
+      object-fit: cover; transition: opacity 0.3s ease; 
+      opacity: 0;
+    }
+    
+    .tabs { 
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%); 
+      display: flex; gap: 6px; z-index: 101;
+      background: rgba(10, 10, 10, 0.75); padding: 4px 6px; border-radius: 6px;
+    }
+    .tab { 
+      padding: 5px 14px; border-radius: 4px; cursor: pointer; font-size: 10.5px; 
+      font-weight: 600; letter-spacing: 0.4px; border: 1px solid #333333; 
+      color: #cccccc; background: transparent; transition: all 0.2s ease; text-transform: uppercase;
+    }
+    .tab.active { border-color: #ffffff; color: #ffffff; background: rgba(255, 255, 255, 0.06); }
+
+    .blur { filter: blur(10px) brightness(0.6); }
+    
+    .overlay { 
+      position: absolute; inset: 0; display: none; align-items: center; 
+      justify-content: center; flex-direction: column; text-align: center; 
+      padding: 24px; background: rgba(10, 10, 10, 0.82); z-index: 5;
+    }
+    .overlay-text { font-size: 13px; margin-bottom: 18px; color: #cccccc; letter-spacing: 0.5px; font-weight: 500; }
+    .cta-btn { 
+      background: transparent; color: #ffffff; border: 2px solid #ffffff; 
+      padding: 9px 20px; border-radius: 4px; font-weight: 600; text-decoration: none; 
+      font-size: 11px; letter-spacing: 0.5px; transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="viewer" id="viewerContainer">
+    <div id="loadingSpinner" class="spinner"></div>
+    <div id="lens" class="lens"></div> 
+    
+    <div class="tabs">
+      <div class="tab active" id="tab-detailed" onclick="switchTab('detailed')">DETAILED</div>
+      <div class="tab" id="tab-pixel" onclick="switchTab('pixel')">PIXEL</div>
+    </div>
+
+    <div id="lensToggleBtn" class="lens-btn" onclick="toggleLens()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+    </div>
+
+    <img id="nftImage" src="" class="nft-img" alt="L00PSimg" />
+
+    <div id="overlay" class="overlay">
+      <div id="overlay-text" class="overlay-text"></div>
+      <div class="cta-btn">SWITCH at l00ps.art or use switchReality function in the write tab of the collection contract on Etherscan</div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenId = urlParams.get('id') || 1;
+    const DNA = urlParams.get('DNA');
+    
+    const PIXEL_IMG = `https://ipfs.io/ipfs/bafybeigmmzr4nnsik3v3zry6m73yo2upkdm4pmtlqcj6btlc6rwlseqsjq/${tokenId}.png`;
+    const DETAILED_IMG = `https://ipfs.io/ipfs/bafybeifwzlc6ix3rz4nvl3cpzsnl6ywvcykhokgdrrzrgjjj2hgcrngx5m/${DNA}.png`;
+
+    let currentOnChainReality = 'detailed'; 
+    let isLensActive = false; // State to track if lens is on
+
+    const viewer = document.getElementById('viewerContainer');
+    const img = document.getElementById('nftImage');
+    const lens = document.getElementById('lens');
+    const lensBtn = document.getElementById('lensToggleBtn');
+    const zoomLevel = 8; 
+
+    function toggleLens() {
+      isLensActive = !isLensActive;
+      lensBtn.classList.toggle('active', isLensActive);
+      if (!isLensActive) lens.style.display = 'none';
+    }
+
+    viewer.addEventListener('mousemove', (e) => {
+      // Only run if lens is active and not covered by overlay
+      if (!isLensActive || img.style.opacity === '0' || overlay.style.display === 'flex') {
+        lens.style.display = 'none';
+        return;
+      }
+      
+      lens.style.display = 'block';
+      const rect = img.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      lens.style.left = x + 'px';
+      lens.style.top = y + 'px';
+
+      const percX = (x / rect.width) * 100;
+      const percY = (y / rect.height) * 100;
+      
+      lens.style.backgroundPosition = `${percX}% ${percY}%`;
+    });
+
+    viewer.addEventListener('mouseleave', () => { 
+      lens.style.display = 'none'; 
+    });
+
+    function switchTab(targetReality) {
+      const spinner = document.getElementById('loadingSpinner');
+      const overlay = document.getElementById('overlay');
+      const overlayText = document.getElementById('overlay-text');
+      const pixelTab = document.getElementById('tab-pixel');
+      const detailedTab = document.getElementById('tab-detailed');
+
+      // Update UI for tabs
+      pixelTab.classList.toggle('active', targetReality === 'pixel');
+      detailedTab.classList.toggle('active', targetReality === 'detailed');
+
+      // Hide/Show Lens Toggle Button based on tab
+      lensBtn.style.display = (targetReality === 'detailed') ? 'flex' : 'none';
+      if(targetReality === 'pixel') {
+          isLensActive = false;
+          lensBtn.classList.remove('active');
+          lens.style.display = 'none';
+      }
+
+      spinner.style.display = 'block';
+      img.style.opacity = '0';
+      lens.style.display = 'none';
+
+      const newSrc = targetReality === 'pixel' ? PIXEL_IMG : DETAILED_IMG;
+      img.src = newSrc;
+      
+      lens.style.backgroundImage = `url('${newSrc}')`;
+      lens.style.backgroundSize = `${zoomLevel * 100}%`;
+
+      img.onload = () => {
+        spinner.style.display = 'none';
+        img.style.opacity = '1';
+      };
+
+      if (targetReality !== currentOnChainReality) {
+        img.classList.add('blur');
+        overlay.style.display = 'flex';
+        overlayText.textContent = `NFT OWNER ONLY - You can switch reality to pixel, onchain.`;
+      } else {
+        img.classList.remove('blur');
+        overlay.style.display = 'none';
+      }
+    }
+
+    window.onload = () => {
+      switchTab(currentOnChainReality);
+    };
+  </script>
+</body>
+</html>
