@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>L00PS Reality Viewer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    body { 
+      margin: 0; padding:0; background: #0a0a0a; color: #ffffff; 
+      font-family: 'Inter', system-ui, sans-serif; 
+      display: flex; flex-direction: column; align-items: center; 
+      justify-content: center; height: 100vh; overflow: hidden;
+    }
+
+    /* Fixed Viewer container with Flexbox for centering */
+    .viewer { 
+      position: relative; width: 100%; max-height:100vh; height: auto; 
+      border-radius: 12px; overflow: hidden; border: 1px solid #1f1f1f; 
+      display: flex; justify-content: center; align-items: center;
+    }
+
+    /* Spinner styles */
+    .spinner {
+      position: absolute; width: 40px; height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top: 4px solid #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      z-index: 2;
+      display: none; /* Hidden by default */
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    .nft-img { 
+      width: 100%; height: 100%; max-width: 1000px;
+      object-fit: cover; transition: opacity 0.3s ease, filter 0.4s ease; 
+      opacity: 0; /* Hidden until loaded */
+    }
+    
+    /* Small clean tabs overlaid on top of image */
+    .tabs { 
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%); 
+      display: flex; gap: 6px; z-index: 10;
+      background: rgba(10, 10, 10, 0.75); padding: 4px 6px; border-radius: 6px;
+    }
+    .tab { 
+      padding: 5px 14px; border-radius: 4px; cursor: pointer; font-size: 10.5px; 
+      font-weight: 600; letter-spacing: 0.4px; border: 1px solid #333333; 
+      color: #cccccc; background: transparent; transition: all 0.2s ease; text-transform: uppercase;
+    }
+    .tab:hover { border-color: #555555; color: #ffffff; }
+    .tab.active { border-color: #ffffff; color: #ffffff; background: rgba(255, 255, 255, 0.06); }
+
+    /* Blurred locked state */
+    .blur { filter: blur(1px) brightness(0.9); }
+    
+    /* Overlay - shown only on non-current reality */
+    .overlay { 
+      position: absolute; inset: 0; display: none; align-items: center; 
+      justify-content: center; flex-direction: column; text-align: center; 
+      padding: 24px; background: rgba(10, 10, 10, 0.82); z-index: 5;
+    }
+    .overlay-text { font-size: 13px; margin-bottom: 18px; color: #cccccc; letter-spacing: 0.5px; font-weight: 500; }
+    .cta-btn { 
+      background: transparent; color: #ffffff; border: 2px solid #ffffff; 
+      padding: 9px 20px; border-radius: 4px; font-weight: 600; text-decoration: none; 
+      font-size: 11px; letter-spacing: 0.5px; transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="viewer">
+    <div id="loadingSpinner" class="spinner"></div>
+
+    <div class="tabs">
+      <div class="tab active" id="tab-pixel" onclick="switchTab('pixel')">PIXEL</div>
+      <div class="tab" id="tab-detailed" onclick="switchTab('detailed')">DETAILED</div>
+    </div>
+
+    <img id="nftImage" src="" class="nft-img" alt="L00PS Reality" />
+
+    <div id="overlay" class="overlay">
+      <div id="overlay-text" class="overlay-text"></div>
+      <div class="cta-btn">SWITCH at l00ps.art or use switchReality function in the write tab of the collection contract on Etherscan</div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenId = urlParams.get('id') || 1;
+    const DNA = urlParams.get('DNA');
+    
+    const PIXEL_IMG = `https://ipfs.io/ipfs/bafybeigmmzr4nnsik3v3zry6m73yo2upkdm4pmtlqcj6btlc6rwlseqsjq/${tokenId}.png`;
+    const DETAILED_IMG = `https://ipfs.io/ipfs/bafybeifwzlc6ix3rz4nvl3cpzsnl6ywvcykhokgdrrzrgjjj2hgcrngx5m//${DNA}.png`;
+
+    let currentOnChainReality = 'pixel'; 
+
+    function switchTab(targetReality) {
+      const img = document.getElementById('nftImage');
+      const spinner = document.getElementById('loadingSpinner');
+      const overlay = document.getElementById('overlay');
+      const overlayText = document.getElementById('overlay-text');
+      const pixelTab = document.getElementById('tab-pixel');
+      const detailedTab = document.getElementById('tab-detailed');
+
+      // Update UI state
+      pixelTab.classList.toggle('active', targetReality === 'pixel');
+      detailedTab.classList.toggle('active', targetReality === 'detailed');
+
+      // 1. Show spinner, fade out/hide image
+      spinner.style.display = 'block';
+      img.style.opacity = '0';
+
+      // 2. Setup loading handlers
+      img.onload = () => {
+        spinner.style.display = 'none';
+        img.style.opacity = '1';
+      };
+      
+      img.onerror = () => {
+        spinner.style.display = 'none'; // Stop spinner on load failure
+      };
+
+      // 3. Set new source
+      img.src = targetReality === 'pixel' ? PIXEL_IMG : DETAILED_IMG;
+
+      // 4. Handle Overlay
+      if (targetReality !== currentOnChainReality) {
+        img.classList.add('blur');
+        overlay.style.display = 'flex';
+        overlayText.textContent = `NFT OWNER ONLY - You can switch reality to detailed, onchain.`;
+      } else {
+        img.classList.remove('blur');
+        overlay.style.display = 'none';
+      }
+    }
+
+    window.onload = () => {
+      switchTab(currentOnChainReality);
+    };
+  </script>
+</body>
+</html>
